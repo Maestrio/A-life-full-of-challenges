@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Challenge Tracker</string>
+    <string name="widget_name">Challenge Status</string>
+    <string name="widget_description">Shows active challenges with quick check-in</string>
+</resources>
