@@ -14,6 +14,10 @@ enum class ChallengeStatus {
     UPCOMING, ACTIVE, COMPLETED, ARCHIVED
 }
 
+enum class ChallengeMode {
+    MULTI_DAY, SINGLE_DAY
+}
+
 @Entity(tableName = "challenges")
 data class ChallengeEntity(
     @PrimaryKey
@@ -22,6 +26,7 @@ data class ChallengeEntity(
     val description: String = "",
     val terminalGoal: String = "",
     val challengeType: ChallengeType = ChallengeType.ADDITION,
+    val challengeMode: ChallengeMode = ChallengeMode.MULTI_DAY,
     val duration: Int,
     val startDate: LocalDate,
     val endDate: LocalDate,

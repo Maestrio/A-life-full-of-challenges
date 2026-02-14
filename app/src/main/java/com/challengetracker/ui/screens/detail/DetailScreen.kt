@@ -1,6 +1,8 @@
 package com.challengetracker.ui.screens.detail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -10,11 +12,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
@@ -42,17 +48,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.challengetracker.data.local.database.entities.ChallengeMode
 import com.challengetracker.data.local.database.entities.ChallengeType
+import com.challengetracker.data.local.database.entities.DailyCheckInEntity
 import com.challengetracker.ui.components.ChallengeCalendarView
 import com.challengetracker.ui.components.StatsCard
 import com.challengetracker.ui.theme.FailureRed
+import com.challengetracker.ui.theme.FutureGray
 import com.challengetracker.ui.theme.SuccessGreen
 import com.challengetracker.ui.theme.WarningYellow
 import com.challengetracker.util.DateUtils
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -65,13 +76,13 @@ fun DetailScreen(
     val challengeWithStats by viewModel.challengeWithStats.collectAsStateWithLifecycle()
     val failedCheckIns by viewModel.failedCheckIns.collectAsStateWithLifecycle()
     val reflections by viewModel.reflections.collectAsStateWithLifecycle()
-    val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
-    val selectedCheckIn by viewModel.selectedCheckIn.collectAsStateWithLifecycle()
+    val dateSelection by viewModel.dateSelection.collectAsStateWithLifecycle()
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showArchiveDialog by remember { mutableStateOf(false) }
 
     val stats = challengeWithStats ?: return
+    val isSingleDay = stats.challenge.challengeMode == ChallengeMode.SINGLE_DAY
 
     Scaffold(
         topBar = {
@@ -118,6 +129,12 @@ fun DetailScreen(
                             onClick = {},
                             label = { Text(stats.challenge.status.name) }
                         )
+                        if (isSingleDay) {
+                            AssistChip(
+                                onClick = {},
+                                label = { Text("Single Day") }
+                            )
+                        }
                     }
                     if (stats.challenge.terminalGoal.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -135,77 +152,129 @@ fun DetailScreen(
                 }
             }
 
-            // Stats overview
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatsCard(
-                    label = "Completed",
-                    value = "${stats.completedDays}/${stats.daysElapsed}",
-                    modifier = Modifier.weight(1f)
+            if (isSingleDay) {
+                // Single day challenge view
+                SingleDayChallengeView(
+                    date = stats.challenge.startDate,
+                    checkIn = stats.checkIns.firstOrNull(),
+                    onCheckIn = { viewModel.selectDate(stats.challenge.startDate) }
                 )
-                StatsCard(
-                    label = "Success Rate",
-                    value = "${String.format("%.0f", stats.successRate)}%",
-                    modifier = Modifier.weight(1f),
-                    valueColor = when {
-                        stats.successRate >= stats.challenge.successThreshold -> SuccessGreen
-                        stats.successRate >= stats.challenge.successThreshold - 5 -> WarningYellow
-                        else -> FailureRed
+            } else {
+                // Multi-day stats overview
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatsCard(
+                        label = "Completed",
+                        value = "${stats.completedDays}/${stats.daysElapsed}",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatsCard(
+                        label = "Success Rate",
+                        value = "${String.format("%.0f", stats.successRate)}%",
+                        modifier = Modifier.weight(1f),
+                        valueColor = when {
+                            stats.successRate >= stats.challenge.successThreshold -> SuccessGreen
+                            stats.successRate >= stats.challenge.successThreshold - 5 -> WarningYellow
+                            else -> FailureRed
+                        }
+                    )
+                }
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatsCard(
+                        label = "Current Streak",
+                        value = "${stats.currentStreak}",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatsCard(
+                        label = "Longest Streak",
+                        value = "${stats.longestStreak}",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Calendar
+                Text("Calendar", style = MaterialTheme.typography.titleMedium)
+                ChallengeCalendarView(
+                    startDate = stats.challenge.startDate,
+                    endDate = stats.challenge.endDate,
+                    checkIns = stats.checkIns,
+                    onDayClick = { viewModel.selectDate(it) }
+                )
+
+                // Day of week breakdown
+                val dowStats = viewModel.getDayOfWeekStats()
+                if (dowStats.any { it.totalCount > 0 }) {
+                    Text("Day of Week Breakdown", style = MaterialTheme.typography.titleMedium)
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            dowStats.forEach { day ->
+                                if (day.totalCount > 0) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            DateUtils.getDayOfWeekName(day.dayOfWeek),
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Text(
+                                            "${day.completedCount}/${day.totalCount} (${String.format("%.0f", day.successRate)}%)",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (day.successRate >= stats.challenge.successThreshold) SuccessGreen else FailureRed
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
-                )
-            }
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatsCard(
-                    label = "Current Streak",
-                    value = "${stats.currentStreak}",
-                    modifier = Modifier.weight(1f)
-                )
-                StatsCard(
-                    label = "Longest Streak",
-                    value = "${stats.longestStreak}",
-                    modifier = Modifier.weight(1f)
-                )
-            }
+                }
 
-            // Calendar
-            Text("Calendar", style = MaterialTheme.typography.titleMedium)
-            ChallengeCalendarView(
-                startDate = stats.challenge.startDate,
-                endDate = stats.challenge.endDate,
-                checkIns = stats.checkIns,
-                onDayClick = { viewModel.selectDate(it) }
-            )
-
-            // Day of week breakdown
-            val dowStats = viewModel.getDayOfWeekStats()
-            if (dowStats.any { it.totalCount > 0 }) {
-                Text("Day of Week Breakdown", style = MaterialTheme.typography.titleMedium)
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        dowStats.forEach { day ->
-                            if (day.totalCount > 0) {
+                // Slip Analysis
+                if (failedCheckIns.isNotEmpty()) {
+                    Text("Slip Analysis", style = MaterialTheme.typography.titleMedium)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = FailureRed.copy(alpha = 0.1f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            val patterns = viewModel.detectPatterns()
+                            patterns.forEach { pattern ->
+                                Text(
+                                    text = pattern,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = FailureRed,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                            }
+                            failedCheckIns.take(5).forEach { checkIn ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
+                                        .padding(vertical = 2.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        DateUtils.getDayOfWeekName(day.dayOfWeek),
-                                        style = MaterialTheme.typography.bodyMedium
+                                        DateUtils.formatShortDate(checkIn.date),
+                                        style = MaterialTheme.typography.bodySmall
                                     )
-                                    Text(
-                                        "${day.completedCount}/${day.totalCount} (${String.format("%.0f", day.successRate)}%)",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (day.successRate >= stats.challenge.successThreshold) SuccessGreen else FailureRed
-                                    )
+                                    if (checkIn.note.isNotBlank()) {
+                                        Text(
+                                            checkIn.note,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f).padding(start = 8.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -213,81 +282,40 @@ fun DetailScreen(
                 }
             }
 
-            // Slip Analysis
-            if (failedCheckIns.isNotEmpty()) {
-                Text("Slip Analysis", style = MaterialTheme.typography.titleMedium)
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = FailureRed.copy(alpha = 0.1f))
+            // Weekly Reflections (for multi-day challenges)
+            if (!isSingleDay) {
+                Text("Weekly Reflections", style = MaterialTheme.typography.titleMedium)
+                OutlinedButton(
+                    onClick = { onNavigateToReview(stats.challenge.id) },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        val patterns = viewModel.detectPatterns()
-                        patterns.forEach { pattern ->
-                            Text(
-                                text = pattern,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = FailureRed,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                        }
-                        failedCheckIns.take(5).forEach { checkIn ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    DateUtils.formatShortDate(checkIn.date),
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                if (checkIn.note.isNotBlank()) {
-                                    Text(
-                                        checkIn.note,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.weight(1f).padding(start = 8.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    Text("Write Weekly Reflection")
                 }
-            }
-
-            // Weekly Reflections
-            Text("Weekly Reflections", style = MaterialTheme.typography.titleMedium)
-            OutlinedButton(
-                onClick = { onNavigateToReview(stats.challenge.id) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Write Weekly Reflection")
-            }
-            reflections.forEach { reflection ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            "Week ${reflection.weekNumber}",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        if (reflection.reflection.isNotBlank()) {
-                            Text(reflection.reflection, style = MaterialTheme.typography.bodyMedium)
-                        }
-                        if (reflection.whatWorked.isNotBlank()) {
+                reflections.forEach { reflection ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                "What worked: ${reflection.whatWorked}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = SuccessGreen
+                                "Week ${reflection.weekNumber}",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
                             )
-                        }
-                        if (reflection.whatDidnt.isNotBlank()) {
-                            Text(
-                                "What didn't: ${reflection.whatDidnt}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = FailureRed
-                            )
+                            if (reflection.reflection.isNotBlank()) {
+                                Text(reflection.reflection, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            if (reflection.whatWorked.isNotBlank()) {
+                                Text(
+                                    "What worked: ${reflection.whatWorked}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = SuccessGreen
+                                )
+                            }
+                            if (reflection.whatDidnt.isNotBlank()) {
+                                Text(
+                                    "What didn't: ${reflection.whatDidnt}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = FailureRed
+                                )
+                            }
                         }
                     }
                 }
@@ -307,12 +335,13 @@ fun DetailScreen(
         }
     }
 
-    // Date selection dialog for check-in or edit
-    selectedDate?.let { date ->
-        val existingCheckIn = selectedCheckIn
+    // Date selection dialog for check-in or edit — only show when ready
+    dateSelection?.let { selection ->
+        if (!selection.ready) return@let
+        val existingCheckIn = selection.existingCheckIn
         if (existingCheckIn != null) {
             EditCheckInDialog(
-                date = date,
+                date = selection.date,
                 checkIn = existingCheckIn,
                 onDismiss = { viewModel.dismissDateSelection() },
                 onSave = { completed, note, mood, difficulty, editReason ->
@@ -321,10 +350,10 @@ fun DetailScreen(
             )
         } else {
             CheckInForDateDialog(
-                date = date,
+                date = selection.date,
                 onDismiss = { viewModel.dismissDateSelection() },
                 onCheckIn = { completed, skipped, note, mood, difficulty ->
-                    viewModel.checkIn(date, completed, skipped, note, mood, difficulty)
+                    viewModel.checkIn(selection.date, completed, skipped, note, mood, difficulty)
                 }
             )
         }
@@ -373,8 +402,98 @@ fun DetailScreen(
 }
 
 @Composable
+private fun SingleDayChallengeView(
+    date: LocalDate,
+    checkIn: DailyCheckInEntity?,
+    onCheckIn: () -> Unit
+) {
+    val today = LocalDate.now()
+    val isFuture = date.isAfter(today)
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = DateUtils.formatDate(date),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = when {
+                    date == today -> "Today"
+                    isFuture -> {
+                        val days = java.time.temporal.ChronoUnit.DAYS.between(today, date)
+                        "In $days day${if (days != 1L) "s" else ""}"
+                    }
+                    else -> {
+                        val days = java.time.temporal.ChronoUnit.DAYS.between(date, today)
+                        "$days day${if (days != 1L) "s" else ""} ago"
+                    }
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Status indicator
+            val bgColor = when {
+                isFuture -> FutureGray.copy(alpha = 0.3f)
+                checkIn == null -> MaterialTheme.colorScheme.surfaceVariant
+                checkIn.completed -> SuccessGreen
+                else -> FailureRed
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+                    .background(bgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                when {
+                    checkIn?.completed == true -> Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Completed",
+                        tint = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    checkIn != null -> Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Not completed",
+                        tint = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                    isFuture -> Text("Upcoming", style = MaterialTheme.typography.labelSmall)
+                    else -> Text("No data", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+
+            if (checkIn?.note?.isNotBlank() == true) {
+                Text(
+                    text = checkIn.note,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (!isFuture) {
+                Button(
+                    onClick = onCheckIn,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (checkIn != null) "Edit Check-in" else "Check In")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun CheckInForDateDialog(
-    date: java.time.LocalDate,
+    date: LocalDate,
     onDismiss: () -> Unit,
     onCheckIn: (completed: Boolean, skipped: Boolean, note: String, mood: Int?, difficulty: Int?) -> Unit
 ) {
@@ -411,8 +530,8 @@ private fun CheckInForDateDialog(
 
 @Composable
 private fun EditCheckInDialog(
-    date: java.time.LocalDate,
-    checkIn: com.challengetracker.data.local.database.entities.DailyCheckInEntity,
+    date: LocalDate,
+    checkIn: DailyCheckInEntity,
     onDismiss: () -> Unit,
     onSave: (completed: Boolean, note: String, mood: Int?, difficulty: Int?, editReason: String) -> Unit
 ) {

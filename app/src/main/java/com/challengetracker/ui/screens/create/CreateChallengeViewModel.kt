@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.challengetracker.data.local.database.entities.ChallengeEntity
+import com.challengetracker.data.local.database.entities.ChallengeMode
 import com.challengetracker.data.local.database.entities.ChallengeStatus
 import com.challengetracker.data.local.database.entities.ChallengeType
 import com.challengetracker.data.local.datastore.SettingsDataStore
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.util.UUID
 import javax.inject.Inject
 
 data class CreateChallengeState(
@@ -22,9 +24,10 @@ data class CreateChallengeState(
     val description: String = "",
     val terminalGoal: String = "",
     val challengeType: ChallengeType = ChallengeType.ADDITION,
+    val challengeMode: ChallengeMode = ChallengeMode.MULTI_DAY,
     val duration: Int = 30,
     val customDuration: Boolean = false,
-    val startDate: LocalDate = LocalDate.now().plusDays(1),
+    val startDate: LocalDate = LocalDate.now(),
     val successThreshold: Int = 90,
     val postChallengeRule: String = "",
     val preMortem: String = "",
@@ -64,6 +67,7 @@ class CreateChallengeViewModel @Inject constructor(
                         description = challenge.description,
                         terminalGoal = challenge.terminalGoal,
                         challengeType = challenge.challengeType,
+                        challengeMode = challenge.challengeMode,
                         duration = challenge.duration,
                         startDate = challenge.startDate,
                         successThreshold = challenge.successThreshold,
@@ -81,6 +85,7 @@ class CreateChallengeViewModel @Inject constructor(
     fun updateDescription(desc: String) { _state.value = _state.value.copy(description = desc) }
     fun updateTerminalGoal(goal: String) { _state.value = _state.value.copy(terminalGoal = goal) }
     fun updateChallengeType(type: ChallengeType) { _state.value = _state.value.copy(challengeType = type) }
+    fun updateChallengeMode(mode: ChallengeMode) { _state.value = _state.value.copy(challengeMode = mode) }
     fun updateDuration(duration: Int) { _state.value = _state.value.copy(duration = duration, customDuration = false) }
     fun updateCustomDuration(duration: Int) { _state.value = _state.value.copy(duration = duration, customDuration = true) }
     fun updateStartDate(date: LocalDate) { _state.value = _state.value.copy(startDate = date) }
@@ -94,11 +99,14 @@ class CreateChallengeViewModel @Inject constructor(
             _state.value = current.copy(error = "Challenge name is required")
             return
         }
-        if (current.duration < 1) {
+
+        val isSingleDay = current.challengeMode == ChallengeMode.SINGLE_DAY
+
+        if (!isSingleDay && current.duration < 1) {
             _state.value = current.copy(error = "Duration must be at least 1 day")
             return
         }
-        if (current.successThreshold !in 50..100) {
+        if (!isSingleDay && current.successThreshold !in 50..100) {
             _state.value = current.copy(error = "Threshold must be between 50% and 100%")
             return
         }
@@ -106,7 +114,9 @@ class CreateChallengeViewModel @Inject constructor(
         _state.value = current.copy(isSaving = true)
 
         viewModelScope.launch {
-            val endDate = current.startDate.plusDays(current.duration.toLong() - 1)
+            val duration = if (isSingleDay) 1 else current.duration
+            val endDate = current.startDate.plusDays(duration.toLong() - 1)
+            val threshold = if (isSingleDay) 100 else current.successThreshold
             val today = LocalDate.now()
             val status = when {
                 current.startDate.isAfter(today) -> ChallengeStatus.UPCOMING
@@ -115,15 +125,16 @@ class CreateChallengeViewModel @Inject constructor(
             }
 
             val challenge = ChallengeEntity(
-                id = current.editingId ?: java.util.UUID.randomUUID().toString(),
+                id = current.editingId ?: UUID.randomUUID().toString(),
                 name = current.name,
                 description = current.description,
                 terminalGoal = current.terminalGoal,
                 challengeType = current.challengeType,
-                duration = current.duration,
+                challengeMode = current.challengeMode,
+                duration = duration,
                 startDate = current.startDate,
                 endDate = endDate,
-                successThreshold = current.successThreshold,
+                successThreshold = threshold,
                 postChallengeRule = current.postChallengeRule,
                 preMortem = current.preMortem,
                 status = status

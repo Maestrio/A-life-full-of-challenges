@@ -45,23 +45,25 @@ class DetailViewModel @Inject constructor(
         reflectionRepository.getReflectionsForChallenge(challengeId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _selectedDate = MutableStateFlow<LocalDate?>(null)
-    val selectedDate: StateFlow<LocalDate?> = _selectedDate.asStateFlow()
+    data class DateSelection(
+        val date: LocalDate,
+        val existingCheckIn: DailyCheckInEntity?,
+        val ready: Boolean = false
+    )
 
-    private val _selectedCheckIn = MutableStateFlow<DailyCheckInEntity?>(null)
-    val selectedCheckIn: StateFlow<DailyCheckInEntity?> = _selectedCheckIn.asStateFlow()
+    private val _dateSelection = MutableStateFlow<DateSelection?>(null)
+    val dateSelection: StateFlow<DateSelection?> = _dateSelection.asStateFlow()
 
     fun selectDate(date: LocalDate) {
-        _selectedDate.value = date
         viewModelScope.launch {
             val checkIns = checkInRepository.getCheckInsForChallengeOnce(challengeId)
-            _selectedCheckIn.value = checkIns.find { it.date == date }
+            val existing = checkIns.find { it.date == date }
+            _dateSelection.value = DateSelection(date, existing, ready = true)
         }
     }
 
     fun dismissDateSelection() {
-        _selectedDate.value = null
-        _selectedCheckIn.value = null
+        _dateSelection.value = null
     }
 
     fun checkIn(
@@ -74,8 +76,7 @@ class DetailViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             checkInRepository.checkIn(challengeId, date, completed, skipped, note, mood, difficulty)
-            _selectedDate.value = null
-            _selectedCheckIn.value = null
+            _dateSelection.value = null
         }
     }
 
@@ -89,8 +90,7 @@ class DetailViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             checkInRepository.editCheckIn(checkIn, completed, note, mood, difficulty, editReason)
-            _selectedDate.value = null
-            _selectedCheckIn.value = null
+            _dateSelection.value = null
         }
     }
 

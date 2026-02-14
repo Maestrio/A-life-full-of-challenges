@@ -29,12 +29,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.challengetracker.data.local.database.entities.ChallengeMode
 import com.challengetracker.data.local.database.entities.ChallengeType
 import com.challengetracker.domain.model.ChallengeWithStats
 import com.challengetracker.ui.theme.FailureRed
 import com.challengetracker.ui.theme.SkippedOrange
 import com.challengetracker.ui.theme.SuccessGreen
 import com.challengetracker.ui.theme.WarningYellow
+import com.challengetracker.util.DateUtils
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 @Composable
 fun ChallengeCard(
@@ -44,6 +48,7 @@ fun ChallengeCard(
     modifier: Modifier = Modifier
 ) {
     val challenge = challengeWithStats.challenge
+    val isSingleDay = challenge.challengeMode == ChallengeMode.SINGLE_DAY
     val progressColor by animateColorAsState(
         targetValue = when {
             challengeWithStats.successRate >= challenge.successThreshold -> SuccessGreen
@@ -89,59 +94,93 @@ fun ChallengeCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Day ${challengeWithStats.daysElapsed} of ${challenge.duration}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "${String.format("%.0f", challengeWithStats.successRate)}%",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = progressColor
-                )
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            LinearProgressIndicator(
-                progress = { challengeWithStats.progressFraction },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp),
-                color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.LocalFireDepartment,
-                        contentDescription = "Streak",
-                        tint = if (challengeWithStats.currentStreak > 0) SkippedOrange else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
+            if (isSingleDay) {
+                // Single-day challenge: show relative date info
+                val today = LocalDate.now()
+                val date = challenge.startDate
+                val relativeText = when {
+                    date == today -> "Today"
+                    date.isAfter(today) -> {
+                        val days = ChronoUnit.DAYS.between(today, date)
+                        "In $days day${if (days != 1L) "s" else ""}"
+                    }
+                    else -> {
+                        val days = ChronoUnit.DAYS.between(date, today)
+                        "$days day${if (days != 1L) "s" else ""} ago"
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Text(
-                        text = "${challengeWithStats.currentStreak} day streak",
+                        text = DateUtils.formatDate(date),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = relativeText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                // Multi-day challenge: show progress
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Day ${challengeWithStats.daysElapsed} of ${challenge.duration}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${String.format("%.0f", challengeWithStats.successRate)}%",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = progressColor
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                LinearProgressIndicator(
+                    progress = { challengeWithStats.progressFraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp),
+                    color = progressColor,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.LocalFireDepartment,
+                            contentDescription = "Streak",
+                            tint = if (challengeWithStats.currentStreak > 0) SkippedOrange else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "${challengeWithStats.currentStreak} day streak",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "${challengeWithStats.daysRemaining} days left",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = "${challengeWithStats.daysRemaining} days left",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }

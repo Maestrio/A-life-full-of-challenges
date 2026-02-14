@@ -1,6 +1,7 @@
 package com.challengetracker.data.local.database
 
 import androidx.room.TypeConverter
+import com.challengetracker.data.local.database.entities.ChallengeMode
 import com.challengetracker.data.local.database.entities.ChallengeStatus
 import com.challengetracker.data.local.database.entities.ChallengeType
 import java.time.LocalDate
@@ -30,4 +31,10 @@ class Converters {
 
     @TypeConverter
     fun toChallengeStatus(value: String): ChallengeStatus = ChallengeStatus.valueOf(value)
+
+    @TypeConverter
+    fun fromChallengeMode(value: ChallengeMode): String = value.name
+
+    @TypeConverter
+    fun toChallengeMode(value: String): ChallengeMode = ChallengeMode.valueOf(value)
 }

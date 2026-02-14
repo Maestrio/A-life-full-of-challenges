@@ -25,7 +25,9 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "challenge_tracker_db"
-        ).build()
+        )
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
     }
 
     @Provides

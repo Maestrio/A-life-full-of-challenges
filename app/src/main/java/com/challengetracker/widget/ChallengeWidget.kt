@@ -106,6 +106,7 @@ class ChallengeWidget : GlanceAppWidget() {
 
     private suspend fun loadChallenges(context: Context): List<ChallengeWithStats> {
         val db = Room.databaseBuilder(context, AppDatabase::class.java, "challenge_tracker_db")
+            .addMigrations(AppDatabase.MIGRATION_1_2)
             .build()
         try {
             val challenges = db.challengeDao().getAllChallengesOnce()
